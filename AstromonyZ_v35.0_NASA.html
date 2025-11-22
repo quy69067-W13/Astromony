@@ -1,0 +1,754 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>AstromonyZ v35.0 — NASA Cinematic Universe Edition</title>
+<style>
+:root{
+  --bg1:#02021a; --bg2:#071029; --accent1:#cfa3ff; --accent2:#5fffd2; --text:#eaf7ff; --muted:rgba(200,220,255,0.6);
+  --sun-color:#ffd46a; --ui-w:420px;
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0;font-family:Inter,system-ui,Segoe UI,Roboto,Arial;background:
+ radial-gradient(900px 500px at 15% 20%, rgba(210,123,255,0.02), transparent 6%),
+ radial-gradient(800px 480px at 85% 80%, rgba(0,240,184,0.01), transparent 6%),
+ linear-gradient(180deg,var(--bg1),var(--bg2));color:var(--text);overflow:hidden;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
+
+/* canvases stacked */
+.canvas{position:fixed;left:0;top:0;width:100%;height:100%;z-index:1;pointer-events:none}
+#galaxy{z-index:1} #stars{z-index:2} #nebula{z-index:3} #orbits{z-index:4} #asteroids{z-index:5} #meteorsCanvas{z-index:6}
+
+/* stage & planets */
+#stage{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:auto;z-index:220;will-change:transform}
+.planets-dom{position:relative;width:1600px;height:1000px;transform-style:preserve-3d}
+
+/* UI */
+.ui-card{border-radius:14px;background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(0,0,0,0.04));border:1px solid rgba(255,255,255,0.04);padding:14px;backdrop-filter:blur(10px);box-shadow:0 12px 40px rgba(0,0,0,0.6)}
+#ui{position:fixed;left:18px;top:18px;width:var(--ui-w);z-index:420}
+.header{display:flex;gap:12px;align-items:center}
+.logo{width:48px;height:48px;border-radius:12px;background:linear-gradient(135deg,var(--accent1),var(--accent2));display:flex;align-items:center;justify-content:center;font-weight:800;color:#001}
+.title{font-weight:800;font-size:16px;color:var(--accent2)}
+.row{display:flex;align-items:center;justify-content:space-between;margin-top:10px;gap:8px}
+.small{font-size:13px;color:var(--muted)}
+.btn{padding:8px 12px;border-radius:10px;border:1px solid rgba(255,255,255,0.06);background:transparent;color:var(--text);cursor:pointer;font-weight:600}
+.btn.primary{background:linear-gradient(90deg,var(--accent1),var(--accent2));color:#001;border:none;box-shadow:0 8px 24px rgba(210,123,255,0.06)}
+
+/* events panel */
+#eventsPanel{position:fixed; right:18px; top:18px; width:380px; max-width:92vw; z-index:500; display:flex; flex-direction:column; gap:12px; padding:16px; border-radius:14px;background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01)); border: 1px solid rgba(255,255,255,0.06); box-shadow: 0 12px 50px rgba(2,6,20,0.6); backdrop-filter: blur(12px) saturate(1.05); color: var(--text); transform: translateY(-8px) scale(0.995); opacity:0; pointer-events:none; transition:opacity .28s, transform .28s;}
+#eventsPanel.show{transform:none; opacity:1; pointer-events:auto}
+#eventsPanel h3{margin:0;font-size:15px;font-weight:800;color:var(--accent1);letter-spacing:0.6px}
+
+/* planet DOM */
+.planet-dom{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);pointer-events:auto;will-change:left,top}
+.surface{width:100%;height:100%;border-radius:50%;overflow:hidden;position:relative;display:block}
+.planet-sphere{position:relative;border-radius:50%;box-shadow: 0 8px 40px rgba(0,0,0,0.6), inset 0 3px 12px rgba(255,255,255,0.03);overflow:visible;transition:transform .18s}
+.planet-label{position:absolute;left:50%;top:100%;transform:translateX(-50%);margin-top:8px;color:var(--muted);font-size:13px;pointer-events:none}
+.planet-tooltip{position:fixed;background:rgba(3,6,20,0.85);padding:6px 8px;border-radius:8px;border:1px solid rgba(255,255,255,0.04);font-size:13px;color:var(--text);pointer-events:none;z-index:1500;display:none;white-space:nowrap}
+
+/* effects */
+#effects{position:fixed;inset:0;pointer-events:none;z-index:280}
+.aurora{position:absolute;left:-5%;top:-25%;width:110%;height:60%;mix-blend-mode:screen;filter:blur(36px);opacity:0;transition:opacity .6s}
+.solar-flare{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:760px;height:760px;border-radius:50%;background:radial-gradient(circle, rgba(255,230,160,0.9), rgba(255,140,40,0.12) 40%, transparent 65%);mix-blend-mode:screen;filter:blur(10px);opacity:0;transition:opacity .4s}
+.warp-light{position:absolute;left:-40%;top:10%;width:10%;height:6px;background:linear-gradient(90deg, rgba(255,255,255,0.08), rgba(255,255,255,0.0));transform:skewX(-20deg);filter:blur(6px);opacity:0;pointer-events:none;z-index:300}
+.lens-flares{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);pointer-events:none;mix-blend-mode:screen;opacity:0;transition:opacity .4s}
+.nebula-blob{position:absolute;mix-blend-mode:screen;filter:blur(20px);opacity:0;transition:opacity .6s}
+.wormhole{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:0;height:0;border-radius:50%;box-shadow:0 0 40px rgba(120,160,255,0.3);pointer-events:none;opacity:0}
+.supernova-flash{position:fixed;inset:0;background:radial-gradient(circle, rgba(255,255,255,0.98), rgba(255,240,200,0.12) 20%, transparent 60%);mix-blend-mode:screen;opacity:0;pointer-events:none;transition:opacity .25s}
+.eclipse-overlay{position:fixed;inset:0;pointer-events:none;opacity:0;transition:opacity .4s}
+
+/* meteor DOM */
+#meteor-field{position:fixed;inset:0;pointer-events:none;z-index:290;overflow:hidden}
+.meteor{position:absolute;width:4px;height:120px;border-radius:50%;background:linear-gradient(180deg, rgba(255,255,255,1), rgba(255,255,255,0));filter:blur(1px);mix-blend-mode:screen;opacity:0;transform:rotate(45deg)}
+@keyframes meteorFly{0%{opacity:1; transform:translate(0,-20px) rotate(45deg) scale(0.8)}80%{opacity:0.6}100%{opacity:0; transform:translate(900px,900px) rotate(45deg) scale(0.6)}}
+
+/* comet */
+.comet{position:fixed;pointer-events:none;border-radius:999px;z-index:880;mix-blend-mode:screen}
+.comet .head{width:18px;height:18px;border-radius:50%;box-shadow:0 0 24px 10px rgba(255,240,220,0.95),0 0 80px 28px rgba(255,200,140,0.14)}
+.comet .ion-tail{position:absolute;left:0;top:50%;transform:translateY(-50%);height:10px;border-radius:999px;filter:blur(6px);opacity:0.95}
+
+
+/* UFO */
+.ufo{position:fixed;z-index:1200;pointer-events:none;mix-blend-mode:screen;filter:drop-shadow(0 8px 20px rgba(0,0,0,0.6))}
+.ufo .disc{width:56px;height:18px;border-radius:999px;background:linear-gradient(90deg, rgba(220,220,220,0.95), rgba(180,180,200,0.9));box-shadow:0 6px 24px rgba(120,160,255,0.12),0 0 28px 8px rgba(120,200,255,0.06) inset}
+.ufo .glow{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:80px;height:80px;border-radius:50%;background:radial-gradient(circle, rgba(160,220,255,0.18), rgba(0,0,0,0));filter:blur(8px);opacity:0.9}
+.ufo .beam{position:absolute;left:50%;top:100%;transform:translate(-50%,8px);width:4px;height:120px;background:linear-gradient(180deg, rgba(200,240,255,0.85), rgba(255,255,255,0.02));filter:blur(6px);opacity:0.9}
+
+/* debris and collision visuals */
+.collision-flash { position:absolute; border-radius:50%; background: radial-gradient(circle, rgba(255,255,255,0.98), rgba(255,220,120,0.95) 30%, rgba(255,120,60,0.12) 55%, transparent 85%); filter: blur(8px) saturate(1.3); mix-blend-mode: screen; pointer-events:none; transform-origin:center; animation: collisionFlash 1000ms cubic-bezier(.2,.9,.2,1) forwards; z-index:1100; }
+.collision-wave { position:absolute; border-radius:50%; border: 2px solid rgba(255,210,160,0.28); box-shadow:0 0 160px rgba(255,200,140,0.18); mix-blend-mode:screen; opacity:0.95; pointer-events:none; transform-origin:center; animation: collisionWave 1800ms cubic-bezier(.22,.9,.2,1) forwards; z-index:1090; }
+@keyframes collisionFlash { 0%{transform:scale(0.2);opacity:1} 50%{transform:scale(1.1);opacity:0.8} 100%{transform:scale(4.0);opacity:0} }
+@keyframes collisionWave { 0%{transform:scale(0.3);opacity:0.95} 60%{transform:scale(2.4);opacity:0.6} 100%{transform:scale(5.0);opacity:0} }
+
+/* responsive */
+@media (max-width:720px){ .planets-dom{width:1200px;height:760px} #eventsPanel{right:10px;left:10px} }
+</style>
+</head>
+<body>
+  <!-- canvases -->
+  <canvas id="galaxy" class="canvas"></canvas>
+  <canvas id="stars" class="canvas"></canvas>
+  <canvas id="nebula" class="canvas"></canvas>
+  <canvas id="orbits" class="canvas"></canvas>
+  <canvas id="asteroids" class="canvas"></canvas>
+  <canvas id="meteorsCanvas" class="canvas"></canvas>
+
+  <!-- stage -->
+  <div id="stage">
+    <div class="planets-dom" id="planetsDom" aria-hidden="false"></div>
+    <div id="sunCenter" aria-hidden="true" style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);z-index:240;">
+      <div style="width:380px;height:380px;border-radius:50%;background:radial-gradient(circle at 28% 28%, #fff7d9, var(--sun-color) 30%, #ff8a2e 72%);box-shadow:0 48px 520px rgba(255,140,30,0.28);"></div>
+    </div>
+  </div>
+
+  <!-- effects -->
+  <div id="effects">
+    <div class="aurora" id="auroraEl"></div>
+    <div class="solar-flare" id="flareEl"></div>
+    <div class="warp-light" id="warpEl"></div>
+    <div class="lens-flares" id="lensFlares">
+      <div class="flare" id="lensOne" style="width:420px;height:420px;left:10%;top:50%;opacity:0.0;"></div>
+      <div class="flare" id="lensTwo" style="width:180px;height:180px;left:70%;top:40%;opacity:0.0;"></div>
+      <div class="flare" id="lensThree" style="width:88px;height:88px;left:60%;top:70%;opacity:0.0;"></div>
+    </div>
+    <div id="nebulaContainer"></div>
+    <div class="wormhole" id="wormholeEl"></div>
+    <div class="supernova-flash" id="supernovaEl"></div>
+    <div class="eclipse-overlay" id="eclipseEl"></div>
+    <div id="meteor-field"></div>
+  </div>
+
+  <!-- UI -->
+  <div id="ui" class="ui-card" aria-hidden="true">
+    <div class="header"><div class="logo">Z</div><div><div class="title">AstromonyZ v35.0</div><div class="small">NASA Cinematic Universe Edition</div></div></div>
+    <div class="row"><div class="small">Simulation Speed</div><input id="speedCtrl" type="range" min="0.25" max="5" step="0.05" value="1" style="flex:1"/></div>
+    <div class="row"><div class="small">Time Scale</div><input id="timeScale" type="range" min="50" max="5000" step="10" value="1000" style="flex:1"/></div>
+    <div class="row"><div class="small">Cinematic Pan</div><input id="panToggle" type="checkbox" checked/></div>
+    <div class="row"><div class="small">Camera Mode</div>
+      <select id="camMode" style="flex:1;padding:6px;border-radius:8px;background:rgba(0,0,0,0.12);color:var(--text);border:none">
+        <option value="auto">Auto (slow pan)</option><option value="free">Free Control</option><option value="follow">Follow Planet</option>
+      </select>
+    </div>
+    <div style="margin-top:8px" class="row"><button id="cinematicToggle" class="btn">🎬 Cinematic Tour</button><button id="toggleMoons" class="btn">🌙 Moons</button></div>
+    <div style="margin-top:8px" class="row"><button id="triggerComet" class="btn">☄️ Trigger Comet</button><button id="resetCam" class="btn">Reset Cam</button><button id="spawnUFO" class="btn">🛸 Spam UFO</button></div>
+    <div style="margin-top:8px" class="row"><button id="toggleEvents" class="btn primary">🌌 Control Panel</button></div>
+  </div>
+
+  <!-- menu toggle -->
+  <button id="menuToggle" title="Open Controls">☰</button>
+
+  <!-- events panel -->
+  <div id="eventsPanel" aria-hidden="true">
+    <h3>Universe Controls</h3>
+
+    <div class="tab-row" role="tablist" aria-label="Tabs">
+      <button id="tab-events" class="active" role="tab">Events</button>
+      <button id="tab-settings" role="tab">Settings</button>
+    </div>
+
+    <div id="tabEvents" style="margin-top:8px">
+      <div class="row"><div class="small">Show Orbits</div><input id="toggleOrbits" type="checkbox" checked/></div>
+      <div class="row"><div class="small">Asteroid Belt</div><input id="toggleBelt" type="checkbox" checked/></div>
+      <div class="row"><div class="small">Asteroid Density</div><input id="asteroidDensity" type="range" min="100" max="900" step="10" value="420" style="flex:1"/></div>
+      <div class="row"><div class="small">Auto Comet</div><input id="autoComet" type="checkbox"/></div>
+      <div class="row"><div class="small">Meteor Showers</div><input id="meteorToggle" type="checkbox"/></div>
+
+      <hr style="opacity:.06;border:none;height:1px"/>
+
+      <div class="small" style="font-weight:700">Cosmic Events</div>
+      <div class="row"><div class="small">Activate Cosmic Events</div><input id="toggleCosmicEvents" type="checkbox"/></div>
+      <div class="row"><div class="small">Aurora</div><input id="auroraToggle" type="checkbox" checked/></div>
+      <div class="row"><div class="small">Solar Flare</div><input id="flareToggle" type="checkbox" checked/></div>
+      <div class="row"><div class="small">Nebula</div><input id="nebulaToggle" type="checkbox" checked/></div>
+      <div class="row"><div class="small">Supernova</div><input id="supernovaToggle" type="checkbox"/></div>
+      <div class="row"><div class="small">Wormhole</div><input id="wormholeToggle" type="checkbox"/></div>
+      <div class="row"><div class="small">Eclipse</div><input id="eclipseToggle" type="checkbox"/></div>
+
+      <hr style="opacity:.06;border:none;height:1px"/>
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:6px">
+        <button id="snapshot" class="btn">Snapshot PNG</button>
+        <button id="closePanel" class="btn">Close</button>
+      </div>
+      <div style="height:6px"></div>
+      <div class="small">Tip: bật "Activate Cosmic Events" để hệ tự sinh hiện tượng ngẫu nhiên.</div>
+    </div>
+
+    <div id="tabSettings" style="margin-top:8px;display:none">
+      <div class="row"><div class="small">Enable Orbit Motion</div><input id="orbitToggle" type="checkbox"/></div>
+      <div class="row"><div class="small">Collision Mode</div>
+        <select id="collisionMode" style="flex:1;padding:6px;border-radius:8px;background:rgba(0,0,0,0.12);color:var(--text);border:none"><option value="passive">Passive</option><option value="off">Off</option></select></div>
+      <div class="row"><div class="small">Performance</div>
+        <select id="perfMode" style="flex:1;padding:6px;border-radius:8px;background:rgba(0,0,0,0.12);color:var(--text);border:none">
+          <option value="auto">Auto</option><option value="high">High</option><option value="low">Low</option>
+        </select>
+      </div>
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:6px">
+        <button id="resetSettings" class="btn">Reset</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="fpsBadge">FPS: --</div>
+  <div id="planetTooltip" class="planet-tooltip"></div>
+
+<script>
+/* AstromonyZ v35.0 — NASA Cinematic Universe Edition
+   - Upgrades: Aurora fixed & reworked, warp light, UFO spawn button, meteor/asteroid explosions randomized.
+   - UI unchanged except added UFO button in main row.
+*/
+
+function $(id){ return document.getElementById(id); }
+function clamp(v,a,b){ return Math.max(a,Math.min(b,v)); }
+function nowMs(){ return performance.now(); }
+function choose(arr){ return arr[Math.floor(Math.random()*arr.length)]; }
+
+/* Canvas setup */
+const galaxy = $('galaxy'), stars = $('stars'), nebula = $('nebula'), orbitsCanvas = $('orbits'),
+      astCanvas = $('asteroids'), meteorsCanvas = $('meteorsCanvas');
+const canvases = [galaxy, stars, nebula, orbitsCanvas, astCanvas, meteorsCanvas];
+function resizeCanvases(){
+  canvases.forEach(c=>{ c.width = innerWidth; c.height = innerHeight; c.style.width = innerWidth+'px'; c.style.height = innerHeight+'px'; });
+}
+resizeCanvases(); window.addEventListener('resize', resizeCanvases);
+const gCtx = galaxy.getContext('2d'), sCtx = stars.getContext('2d'), nCtx = nebula.getContext('2d'),
+      oCtx = orbitsCanvas.getContext('2d'), aCtx = astCanvas.getContext('2d'), mCtx = meteorsCanvas.getContext('2d');
+
+/* FPS */
+let fpsSamples = [], lastFrame = performance.now();
+function updateFPS(now){
+  const dt = Math.max(1, now - lastFrame); lastFrame = now;
+  const fps = 1000/dt; fpsSamples.push(fps); if(fpsSamples.length>60) fpsSamples.shift();
+  const avg = Math.round(fpsSamples.reduce((a,b)=>a+b,0)/fpsSamples.length || fps);
+  $('fpsBadge').textContent = 'FPS: ' + avg;
+  return avg;
+}
+
+/* nebula & stars */
+function genNebulaBlobs(){
+  const blobs=[]; const big = Math.max(innerWidth, innerHeight);
+  for(let i=0;i<5;i++) blobs.push({x:Math.random()*innerWidth,y:Math.random()*innerHeight,r:big*0.18 + Math.random()*big*0.16,color:i%2?'rgba(200,140,255,0.04)':'rgba(0,220,170,0.03)',vx:(Math.random()-0.5)*0.02,vy:(Math.random()-0.5)*0.02});
+  return blobs;
+}
+function genStarField(n){
+  const arr=[];
+  for(let i=0;i<n;i++) arr.push({x:Math.random()*innerWidth,y:Math.random()*innerHeight,r:Math.random()*1.8+0.2,phase:Math.random()*Math.PI*2,tw:Math.random()*1.6+0.6});
+  return arr;
+}
+const galaxyLayers = { nebula: genNebulaBlobs(), farStars: genStarField(300), midStars: genStarField(160), nearParticles: genStarField(48) };
+function renderGalaxy(now){
+  gCtx.clearRect(0,0,galaxy.width,galaxy.height);
+  for(const b of galaxyLayers.nebula){
+    b.x += b.vx; b.y += b.vy;
+    const grad = gCtx.createRadialGradient(b.x,b.y,10,b.x,b.y,b.r);
+    grad.addColorStop(0,b.color); grad.addColorStop(0.6,b.color.replace('0.04','0.02')); grad.addColorStop(1,'rgba(0,0,0,0)');
+    gCtx.globalCompositeOperation='screen'; gCtx.fillStyle = grad; gCtx.fillRect(0,0,galaxy.width,galaxy.height); gCtx.globalCompositeOperation='source-over';
+  }
+}
+let starsArr = genStarField(1100);
+function renderStars(now){
+  sCtx.clearRect(0,0,stars.width,stars.height); sCtx.globalCompositeOperation='lighter';
+  for(const s of starsArr){
+    const b = s.base || (s.base = 0.2 + Math.random()*0.8);
+    const tw = s.tw; const phase = s.phase;
+    const brightness = b + Math.sin(now*0.0009*tw + phase)*0.45;
+    sCtx.fillStyle = `rgba(255,255,255,${clamp(brightness,0,1)})`;
+    sCtx.beginPath(); sCtx.arc(s.x,s.y,s.r,0,Math.PI*2); sCtx.fill();
+  } sCtx.globalCompositeOperation='source-over';
+}
+let nebList=[];
+function genNeb(){ nebList=[]; for(let i=0;i<3;i++) nebList.push({x:Math.random()*nebula.width,y:Math.random()*nebula.height,r:Math.max(window.innerWidth,window.innerHeight)*0.16 + Math.random()*180,color:i%2?'rgba(210,110,255,0.04)':'rgba(0,220,170,0.03)',vx:(Math.random()-0.5)*0.02,vy:(Math.random()-0.5)*0.02}); }
+genNeb();
+function renderNeb(now,dt){ nCtx.clearRect(0,0,nebula.width,nebula.height); for(const b of nebList){ b.x+=b.vx*dt*0.06; b.y+=b.vy*dt*0.06; const g=nCtx.createRadialGradient(b.x,b.y,b.r*0.06,b.x,b.y,b.r); g.addColorStop(0,b.color); g.addColorStop(0.6,'rgba(0,0,0,0)'); nCtx.globalCompositeOperation='lighter'; nCtx.fillStyle=g; nCtx.fillRect(0,0,nebula.width,nebula.height); nCtx.globalCompositeOperation='source-over'; } }
+
+/* Planet data (same as before) */
+window.AU = 140;
+const planetData = [
+  {id:'mercury', name:'Mercury', color:'#bdb0a6', r_e:0.38, distAU:0.39, rotationH:1407.6, orbitalD:88, ring:false},
+  {id:'venus',   name:'Venus',   color:'#e3c18a', r_e:0.95, distAU:0.72, rotationH:-5832.5, orbitalD:225, ring:false},
+  {id:'earth',   name:'Earth',   color:'#2f80ed', r_e:1.00, distAU:1.00, rotationH:23.93, orbitalD:365, ring:false},
+  {id:'mars',    name:'Mars',    color:'#d35400', r_e:0.53, distAU:1.52, rotationH:24.62, orbitalD:687, ring:false},
+  {id:'jupiter', name:'Jupiter', color:'#e1ad82', r_e:11.21, distAU:5.20, rotationH:9.93, orbitalD:4331, ring:true},
+  {id:'saturn',  name:'Saturn',  color:'#cdaa7d', r_e:9.45, distAU:9.58, rotationH:10.7, orbitalD:10747, ring:true},
+  {id:'uranus',  name:'Uranus',  color:'#8ee4d8', r_e:4.01, distAU:19.2, rotationH:-17.2, orbitalD:30660, ring:true},
+  {id:'neptune', name:'Neptune', color:'#2d5eff', r_e:3.88, distAU:30.05, rotationH:16.11, orbitalD:60190, ring:false},
+  {id:'pluto',   name:'Pluto',   color:'#cfcfcf', r_e:0.18, distAU:39.5, rotationH:153.3, orbitalD:90560, ring:false}
+];
+const sizeScale = 6;
+function visualDiameter(r_e){ const base = 22; return Math.max(6, Math.round(base * Math.sqrt(r_e) * (sizeScale/6))); }
+
+/* Build planets */
+const planetsDom = $('planetsDom');
+let active = [];
+function buildPlanets(){
+  planetsDom.innerHTML=''; active=[];
+  for(const p of planetData){
+    const wrapper = document.createElement('div'); wrapper.className='planet-dom';
+    const diam = visualDiameter(p.r_e);
+    wrapper.style.width = diam + 'px'; wrapper.style.height = diam + 'px'; wrapper.style.zIndex = 240;
+    const surf = document.createElement('div'); surf.className='surface planet-sphere planet-texture';
+    surf.style.width='100%'; surf.style.height='100%';
+    surf.style.background = `radial-gradient(circle at 30% 30%, ${p.color}, ${shade(p.color,-28)})`;
+    surf.style.borderRadius='50%'; wrapper.appendChild(surf);
+    const label = document.createElement('div'); label.className='planet-label'; label.textContent = p.name; wrapper.appendChild(label);
+    if(p.ring){
+      const ring = document.createElement('div'); ring.className='ring';
+      const rw = Math.max(120, diam*3.6);
+      ring.style.width = rw + 'px'; ring.style.height = (rw*0.6) + 'px';
+      ring.style.left='50%'; ring.style.top='50%';
+      ring.style.border='2px solid rgba(255,255,255,0.04)'; ring.style.borderRadius='50%'; wrapper.appendChild(ring);
+    }
+    p.el = wrapper; p.surface = surf; p.label = label;
+    p.diam = diam; p.angle = 0; p.dist = p.distAU * window.AU * 0.85;
+    p.spinSpeed = calcSpinSpeed(p.rotationH);
+    p.orbitalPeriod = p.orbitalD || p.orbitalD;
+    planetsDom.appendChild(wrapper); active.push(p);
+  }
+  const earth = active.find(p=>p.id==='earth');
+  if(earth){
+    const moonWrap = document.createElement('div'); moonWrap.className='planet-dom'; moonWrap.style.width='18px'; moonWrap.style.height='18px'; moonWrap.style.zIndex=245;
+    const moonSurf = document.createElement('div'); moonSurf.className='surface planet-sphere'; moonSurf.style.background='radial-gradient(circle at 30% 30%, #dcdcdc, #bdbdbd)'; moonWrap.appendChild(moonSurf);
+    moonWrap.dataset.isMoon='1'; earth.moon = { el: moonWrap, ang: 0, dist: Math.max(32, earth.diam*1.8) };
+    planetsDom.appendChild(moonWrap);
+  }
+}
+function calcSpinSpeed(rotationHours){ if(!rotationHours || !isFinite(rotationHours)) rotationHours = 24; const period = Math.abs(rotationHours); const degPerSec = clamp(40 * (10/period), 0.05, 60); return degPerSec / 60; }
+buildPlanets();
+
+function shade(hex, percent){ if(!hex || !hex.startsWith('#')) return hex; const num = parseInt(hex.slice(1),16); let r=(num>>16), g=(num>>8)&255, b=num&255; r=Math.max(0, Math.min(255, Math.floor(r*(1+percent/100)))); g=Math.max(0, Math.min(255, Math.floor(g*(1+percent/100)))); b=Math.max(0, Math.min(255, Math.floor(b*(1+percent/100)))); return `rgb(${r},${g},${b})`; }
+
+/* Camera & cinematic pan */
+const camModeSelect = $('camMode'); const stage = $('stage');
+let sx=0, sy=0, sscale=1, dragging=false, dragStart=null, cinematic=false;
+let panEnabled = true;
+let panOffset = {x:0,y:0}, panStart = performance.now();
+function applyStage(){ stage.style.transform = `translate(${sx + panOffset.x}px,${sy + panOffset.y}px) scale(${sscale})`; }
+applyStage();
+window.addEventListener('pointerdown',(e)=>{ if(camModeSelect.value!=='free') return; dragging=true; dragStart={x:e.clientX,y:e.clientY,sx:sx,sy:sy}; });
+window.addEventListener('pointermove',(e)=>{ if(!dragging) return; sx = dragStart.sx + (e.clientX - dragStart.x); sy = dragStart.sy + (e.clientY - dragStart.y); applyStage(); });
+window.addEventListener('pointerup',()=>{ dragging=false; });
+window.addEventListener('wheel',(e)=>{ e.preventDefault(); sscale = Math.min(Math.max(sscale*(e.deltaY<0?1.06:0.94),0.4),2.5); applyStage(); }, {passive:false});
+$('resetCam').addEventListener('click', ()=>{ sx=sy=0; sscale=1; panOffset.x=panOffset.y=0; applyStage(); });
+
+$('panToggle').addEventListener('change', (e)=>{ panEnabled = !!e.target.checked; });
+
+/* Tooltip */
+const tooltip = $('planetTooltip');
+function showTooltip(text,x,y){ tooltip.style.display='block'; tooltip.textContent = text; const pad = 10; let left = x + pad, top = y + pad; if(left + tooltip.offsetWidth > window.innerWidth - 10) left = x - tooltip.offsetWidth - pad; if(top + tooltip.offsetHeight > window.innerHeight - 10) top = y - tooltip.offsetHeight - pad; tooltip.style.left = left + 'px'; tooltip.style.top = top + 'px'; }
+function hideTooltip(){ tooltip.style.display='none'; }
+function enablePlanetHover(){ active.forEach(p=>{ if(!p || !p.el) return; p.el.addEventListener('pointerenter', (ev)=>{ const info = `${p.name} • Rot: ${p.rotationH || '?'}h • Orbit: ${p.orbitalD||p.orbitalPeriod||'?'}d`; showTooltip(info, ev.clientX, ev.clientY); }); p.el.addEventListener('pointermove', (ev)=> showTooltip(`${p.name} • Rot: ${p.rotationH||'?'}h • Orbit: ${p.orbitalD||p.orbitalPeriod||'?'}d`, ev.clientX, ev.clientY) ); p.el.addEventListener('pointerleave', ()=> hideTooltip()); }); }
+enablePlanetHover();
+
+/* Comet */
+let activeComets = [];
+function spawnComet(){
+  if(activeComets.length >= 6) return;
+  const com = document.createElement('div'); com.className='comet';
+  com.style.left = (-260)+'px'; com.style.top = (60+Math.random()*(innerHeight-120))+'px';
+  com.style.width='18px'; com.style.height='18px';
+  const head = document.createElement('div'); head.className='head'; head.style.background='radial-gradient(circle,#fff,#ffe8b8)'; com.appendChild(head);
+  const ion = document.createElement('div'); ion.className='ion-tail'; ion.style.width='480px'; ion.style.background='linear-gradient(90deg, rgba(180,240,255,0.95), rgba(120,200,255,0.06))'; ion.style.left='18px'; com.appendChild(ion);
+  const dust = document.createElement('div'); dust.className='ion-tail'; dust.style.width='300px'; dust.style.background='linear-gradient(90deg, rgba(255,240,220,0.85), rgba(255,200,160,0.02))'; dust.style.left='18px'; com.appendChild(dust);
+  document.body.appendChild(com); activeComets.push(com);
+  const sparks = [];
+  const sparkCount = 14 + Math.floor(Math.random()*18);
+  for(let i=0;i<sparkCount;i++){ const sp = document.createElement('div'); sp.className='comet-spark'; sp.style.left = com.style.left; sp.style.top = com.style.top; sp.style.background = Math.random()<0.6 ? 'rgba(255,230,180,0.95)' : 'rgba(200,240,255,0.95)'; sp.style.width='2px'; sp.style.height='2px'; document.body.appendChild(sp); sparks.push(sp); }
+  const start = performance.now(), dur = 3200 + Math.random()*3200; const startY = parseFloat(com.style.top);
+  function step(now){
+    const t = (now - start)/dur;
+    if(t>1){ try{ com.remove(); sparks.forEach(s=>s.remove()); }catch(_){} activeComets = activeComets.filter(x=>x!==com); return; }
+    const ease = (u)=> 1 - Math.pow(1-u, 3);
+    const et = ease(Math.max(0, Math.min(1, t)));
+    const x = (et * (innerWidth + 720) - 260);
+    const y = startY + Math.sin(et*Math.PI*2) * 180 * (1 - Math.abs(0.5-et)*2);
+    com.style.left = x + 'px'; com.style.top = y + 'px';
+    const ionEl = com.querySelector('.ion-tail'); if(ionEl) ionEl.style.transform = `translateX(${ -Math.max(0, et*480) }px) rotate(${ et*6 }deg)`;
+    for(let i=0;i<sparks.length;i++){
+      const sp = sparks[i];
+      const off = i * (4 + Math.random()*8);
+      sp.style.left = (x - off - Math.random()*30) + 'px';
+      sp.style.top = (y + (Math.random()*50-25)) + 'px';
+      sp.style.opacity = String(Math.max(0, 1 - et - (i/sparks.length)*0.7));
+    }
+    if(Math.random() < 0.0015){
+      triggerCollisionEffect(x,y,{intensity:0.6 + Math.random()*0.8});
+      spawnDebrisParticles(x,y,4+Math.floor(Math.random()*8));
+    }
+    requestAnimationFrame(step);
+  }
+  requestAnimationFrame(step);
+}
+$('triggerComet').addEventListener('click', ()=> spawnComet());
+setInterval(()=>{ if($('autoComet')?.checked && Math.random()<0.18) spawnComet(); }, 25000);
+
+/* Asteroid belt */
+let asteroidDensity = parseInt($('asteroidDensity').value||420,10);
+const maxAsteroids = 900; let asteroids = [];
+function genAsteroids(n){
+  asteroids = [];
+  const beltInnerAU = 2.2, beltOuterAU = 3.6;
+  for(let i=0;i<n;i++){
+    const a = beltInnerAU + Math.random()*(beltOuterAU - beltInnerAU);
+    const theta = Math.random()*Math.PI*2;
+    const size = 1 + Math.random()*5;
+    const layer = Math.random()<0.12 ? 'near' : (Math.random()<0.2 ? 'mid' : 'far');
+    const color = Math.random()<0.6 ? 'rgba(200,200,200,0.92)' : 'rgba(160,160,170,0.86)';
+    const angSpeed = 0.00012 + (0.00005 * (1/(a)));
+    asteroids.push({a,theta,size,layer,color,angSpeed});
+  }
+}
+genAsteroids(asteroidDensity);
+$('asteroidDensity').addEventListener('input',(e)=>{ asteroidDensity = Math.min(maxAsteroids, parseInt(e.target.value,10)); genAsteroids(asteroidDensity); });
+$('toggleBelt').addEventListener('change',(e)=>{ astCanvas.style.display = e.target.checked ? 'block' : 'none'; });
+
+/* debris canvas */
+(function setupDebrisCanvas(){ if(document.getElementById('debrisCanvas')) return; const c = document.createElement('canvas'); c.id='debrisCanvas'; c.width=innerWidth; c.height=innerHeight; c.style.width=innerWidth+'px'; c.style.height=innerHeight+'px'; c.style.position='fixed'; c.style.left='0'; c.style.top='0'; c.style.pointerEvents='none'; c.style.zIndex='930'; document.body.appendChild(c); window.addEventListener('resize', ()=>{ c.width = innerWidth; c.height = innerHeight; c.style.width = innerWidth+'px'; c.style.height = innerHeight+'px'; }); window._debrisState = { canvas: c, ctx: c.getContext('2d'), particles: [] }; })();
+function spawnDebrisParticles(x, y, count){
+  const state = window._debrisState; if(!state) return; const { ctx, particles } = state;
+  for(let i=0;i<count;i++){
+    const ang = Math.random()*Math.PI*2;
+    const speed = 0.6 + Math.random()*4.2;
+    const life = 700 + Math.random()*1600;
+    const size = 1 + Math.random()*4;
+    particles.push({ x, y, vx: Math.cos(ang)*speed, vy: Math.sin(ang)*speed, life, age:0, size, color: Math.random()<0.6 ? 'rgba(255,220,140,0.95)' : 'rgba(255,180,120,0.9)' });
+  }
+}
+(function debrisLoop(){ const st = window._debrisState; if(!st){ setTimeout(debrisLoop,400); return; } const ctx = st.ctx; const arr = st.particles; const canvas = st.canvas; function step(){ ctx.clearRect(0,0,canvas.width,canvas.height); for(let i=arr.length-1;i>=0;i--){ const p = arr[i]; p.age += 16; if(p.age >= p.life){ arr.splice(i,1); continue; } const t = p.age / p.life; p.x += p.vx * (0.016 * 60) * (1 - t*0.4); p.y += p.vy * (0.016 * 60) * (1 - t*0.4) + (0.06 * t * 60); const alpha = Math.max(0, 1 - t); ctx.beginPath(); let col = p.color.replace(/0\.9|0\.95/, alpha.toFixed(2)); ctx.fillStyle = col; ctx.arc(p.x, p.y, p.size * (1 - 0.2*t), 0, Math.PI*2); ctx.fill(); } requestAnimationFrame(step); } requestAnimationFrame(step); })();
+
+/* Collision effect */
+function triggerCollisionEffect(x,y, opts={}){ const intensity = Math.max(0, Math.min(1, (opts.intensity||0.9))); const flash = document.createElement('div'); flash.className='collision-flash'; const baseSize = 140 + intensity*160; flash.style.width = baseSize + 'px'; flash.style.height = baseSize + 'px'; flash.style.left = (x - baseSize/2) + 'px'; flash.style.top  = (y - baseSize/2) + 'px'; document.body.appendChild(flash); const wave = document.createElement('div'); wave.className='collision-wave'; const waveSize = 160 + intensity * 400; wave.style.width = waveSize + 'px'; wave.style.height = waveSize + 'px'; wave.style.left = (x - waveSize/2) + 'px'; wave.style.top  = (y - waveSize/2) + 'px'; document.body.appendChild(wave); spawnDebrisParticles(x,y,6 + Math.floor(intensity*18)); // shake
+  const original = {x:sx,y:sy}; const shakeStart = performance.now(); const dur = 600 + intensity*1200;
+  function shakeLoop(now){ const t = (now - shakeStart)/dur; if(t>1){ sx = original.x; sy = original.y; applyStage(); return; } const mag = (1 - t) * (8 + intensity*40); sx = original.x + (Math.random()*2-1)*mag; sy = original.y + (Math.random()*2-1)*mag; applyStage(); requestAnimationFrame(shakeLoop); }
+  requestAnimationFrame(shakeLoop);
+  setTimeout(()=>{ try{ flash.remove(); }catch(_){} }, 1100 + intensity*900);
+  setTimeout(()=>{ try{ wave.remove(); }catch(_){} }, 1800 + intensity*1200);
+}
+
+/* Event controls */
+const eventControls = { active:false, aurora:true, flare:true, nebula:true, supernova:false, wormhole:false, eclipse:false, meteor:true };
+$('toggleCosmicEvents').addEventListener('change', e=>{ eventControls.active = !!e.target.checked; if(eventControls.active) startAllEventTimers(); else stopAllEventTimers(); });
+$('auroraToggle').addEventListener('change', e=> eventControls.aurora = !!e.target.checked);
+$('flareToggle').addEventListener('change', e=> eventControls.flare = !!e.target.checked);
+$('nebulaToggle').addEventListener('change', e=> eventControls.nebula = !!e.target.checked);
+$('supernovaToggle').addEventListener('change', e=> eventControls.supernova = !!e.target.checked);
+$('wormholeToggle').addEventListener('change', e=> eventControls.wormhole = !!e.target.checked);
+$('eclipseToggle').addEventListener('change', e=> eventControls.eclipse = !!e.target.checked);
+$('meteorToggle').addEventListener('change', e=> eventControls.meteor = !!e.target.checked);
+
+const auroraEl = $('auroraEl'), flareEl = $('flareEl'), warpEl = $('warpEl'), lensFlares = $('lensFlares'), nebulaContainer = $('nebulaContainer'),
+      wormholeEl = $('wormholeEl'), supernovaEl = $('supernovaEl'), eclipseEl = $('eclipseEl'), meteorField = $('meteor-field');
+
+/* Aurora rework: uses layered gradient divs animated by JS for reliability */
+function runAuroraOnce(){
+  if(!eventControls.active || !eventControls.aurora) return;
+  auroraEl.style.opacity = 1;
+  // create layered gradient canvas inside auroraEl for motion
+  auroraEl.innerHTML = '';
+  const layers = 3;
+  for(let i=0;i<layers;i++){
+    const l = document.createElement('div');
+    l.style.position='absolute'; l.style.left=(5*i)+'%'; l.style.top=(10*i-4)+'%';
+    l.style.width='120%'; l.style.height='120%'; l.style.borderRadius='50%';
+    const r = Math.floor(120 + Math.random()*120), g = Math.floor(80 + Math.random()*160), b = Math.floor(120 + Math.random()*135);
+    l.style.background = `radial-gradient(circle at ${30+Math.random()*40}% ${40+Math.random()*30}%, rgba(${r},${g},${b},0.12), rgba(${r-40},${Math.max(0,g-60)},${b-30},0.02))`;
+    l.style.filter = `blur(${24 + Math.random()*24}px)`; l.style.opacity = '0.0'; auroraEl.appendChild(l);
+    // animate
+    const inDelay = Math.random()*400;
+    setTimeout(()=>{ l.animate([{opacity:0},{opacity:0.9},{opacity:0}],{duration:8000 + Math.random()*6000,easing:'ease-in-out'}); }, inDelay);
+  }
+  // fade parent after duration
+  setTimeout(()=>{ auroraEl.style.opacity = 0; setTimeout(()=> auroraEl.innerHTML='';,900); }, 9000 + Math.random()*7000);
+}
+
+/* Flare */
+function runFlareOnce(){
+  if(!eventControls.active || !eventControls.flare) return;
+  flareEl.style.opacity = 1; lensFlares.style.opacity = 1;
+  const one = $('lensOne'), two = $('lensTwo'), three = $('lensThree');
+  one.style.opacity = 0.18; one.style.transform = 'translateX(-80px) scale(1)';
+  two.style.opacity = 0.12; two.style.transform = 'translateX(120px) scale(0.9)';
+  three.style.opacity = 0.10; three.style.transform = 'translateX(60px) scale(0.7)';
+  setTimeout(()=>{ flareEl.style.opacity = 0; lensFlares.style.opacity = 0; one.style.opacity=0; two.style.opacity=0; three.style.opacity=0; }, 9000 + Math.random()*8000);
+}
+
+/* Nebula */
+function runNebulaOnce(){ if(!eventControls.active || !eventControls.nebula) return; const blob = document.createElement('div'); blob.className='nebula-blob'; const w = 400 + Math.random()*900; const h = 200 + Math.random()*500; blob.style.width = w + 'px'; blob.style.height = h + 'px'; blob.style.left = (Math.random()*innerWidth*0.7) + 'px'; blob.style.top = (Math.random()*innerHeight*0.6) + 'px'; blob.style.background = Math.random()<0.5 ? 'radial-gradient(circle, rgba(200,140,255,0.06), transparent 60%)' : 'radial-gradient(circle, rgba(0,220,170,0.04), transparent 60%)'; blob.style.opacity = 0; nebulaContainer.appendChild(blob); requestAnimationFrame(()=> blob.style.opacity = 1); setTimeout(()=>{ blob.style.opacity = 0; setTimeout(()=>{ try{ blob.remove(); }catch(_){} }, 900); }, 5200 + Math.random()*5000); }
+
+/* Supernova */
+function runSupernovaOnce(){ if(!eventControls.active || !eventControls.supernova) return; supernovaEl.style.opacity = 1; setTimeout(()=> supernovaEl.style.opacity = 0, 700 + Math.random()*1400); }
+
+/* Wormhole */
+function runWormholeOnce(){ if(!eventControls.active || !eventControls.wormhole) return; wormholeEl.style.opacity = 1; wormholeEl.style.width = '680px'; wormholeEl.style.height = '680px'; wormholeEl.animate([{transform:'translate(-50%,-50%) scale(0.2)', opacity:1},{transform:'translate(-50%,-50%) scale(1)', opacity:0}],{duration:2200,easing:'cubic-bezier(.2,.9,.2,1)'}); setTimeout(()=> wormholeEl.style.opacity = 0, 2200); }
+
+/* Eclipse */
+function runEclipseOnce(){ if(!eventControls.active || !eventControls.eclipse) return; eclipseEl.style.opacity = 0.9; eclipseEl.style.background = 'radial-gradient(circle at 50% 50%, rgba(0,0,0,0.0), rgba(0,0,0,0.95) 60%)'; const ring = document.createElement('div'); ring.style.position='fixed'; ring.style.left='50%'; ring.style.top='50%'; ring.style.transform='translate(-50%,-50%)'; ring.style.width='900px'; ring.style.height='900px'; ring.style.borderRadius='50%'; ring.style.boxShadow='0 0 200px 60px rgba(255,220,150,0.5)'; ring.style.zIndex=1150; ring.style.pointerEvents='none'; document.body.appendChild(ring); setTimeout(()=>{ eclipseEl.style.opacity = 0; try{ ring.remove(); }catch(_){} }, 2600); }
+
+/* Meteor shower */
+function spawnDomMeteor(){ const m = document.createElement('div'); m.className='meteor'; const left = Math.random()*100; m.style.left = left+'%'; m.style.top = (-5 - Math.random()*10)+'%'; const delay = Math.random()*4; m.style.animation = `meteorFly ${1.6 + Math.random()*2.6}s linear ${delay}s forwards`; meteorField.appendChild(m); setTimeout(()=>{ try{ m.remove(); }catch(_){} }, (1.6 + Math.random()*2.6 + delay)*1000 + 200); }
+
+/* schedule helpers */
+const eventTimers = {};
+function randomRange(min,max){ return min + Math.random()*(max-min); }
+function scheduleEvent(name,minMs,maxMs,runner){ if(eventTimers[name]) clearTimeout(eventTimers[name]); const next = () => { if(!eventControls.active){ eventTimers[name] = setTimeout(next,1000); return; } const enabled = (name==='aurora' ? eventControls.aurora : name==='flare' ? eventControls.flare : name==='nebula' ? eventControls.nebula : name==='supernova' ? eventControls.supernova : name==='wormhole' ? eventControls.wormhole : name==='eclipse' ? eventControls.eclipse : name==='meteor' ? eventControls.meteor : true); if(enabled) try{ runner(); }catch(e){ console.warn('event run error', e); } eventTimers[name] = setTimeout(next, randomRange(minMs,maxMs)); }; eventTimers[name] = setTimeout(next, randomRange(minMs,maxMs)); }
+function startAllEventTimers(){
+  scheduleEvent('comet',24000,26000,()=>{ if(Math.random()<0.6) spawnComet(); });
+  scheduleEvent('meteor',10000,14000,()=>{ if(Math.random()<0.7) runMeteorShowerOnce(); });
+  scheduleEvent('collision',35000,62000,()=>{ if(Math.random()<0.45){ const rect = planetsDom.getBoundingClientRect(); const x = rect.left + Math.random()*rect.width; const y = rect.top + Math.random()*rect.height; triggerCollisionEffect(x,y,{intensity:0.5+Math.random()*0.9}); spawnDebrisParticles(x,y,4+Math.floor(Math.random()*8)); } });
+  scheduleEvent('flare',60000,90000,runFlareOnce);
+  scheduleEvent('aurora',35000,55000,runAuroraOnce);
+  scheduleEvent('nebula',30000,60000,runNebulaOnce);
+  scheduleEvent('supernova',90000,140000,runSupernovaOnce);
+  scheduleEvent('wormhole',80000,140000,runWormholeOnce);
+  scheduleEvent('eclipse',90000,130000,runEclipseOnce);
+}
+function stopAllEventTimers(){ for(const k in eventTimers){ try{ clearTimeout(eventTimers[k]); }catch(_){} delete eventTimers[k]; } auroraEl.style.opacity=0; flareEl.style.opacity=0; nebulaContainer.innerHTML=''; supernovaEl.style.opacity=0; wormholeEl.style.opacity=0; eclipseEl.style.opacity=0; }
+
+if($('toggleCosmicEvents')?.checked){ eventControls.active=true; startAllEventTimers(); }
+
+/* periodic collision scheduler */
+(function periodicCollisionScheduler(){
+  const period=45000;
+  function scheduleNow(){
+    try{
+      if($('collisionMode')?.value==='passive'){
+        const domRect = planetsDom.getBoundingClientRect();
+        const cx = domRect.left + domRect.width/2, cy = domRect.top + domRect.height/2;
+        const inner = 2.2 * window.AU, outer = 3.6 * window.AU;
+        const r = inner + Math.random()*(outer-inner);
+        const theta = Math.random()*Math.PI*2;
+        const x = cx + Math.cos(theta)*r*(Math.random()<0.5?0.9:1.0);
+        const y = cy + Math.sin(theta)*r*0.48;
+        triggerCollisionEffect(x,y,{intensity:0.6+Math.random()*0.9});
+        spawnDebrisParticles(x,y,4+Math.floor(Math.random()*8));
+      }
+    }catch(e){}
+    setTimeout(scheduleNow, period + (Math.random()*8000-4000));
+  }
+  setTimeout(scheduleNow, 6000 + Math.random()*2000);
+})();
+
+/* meteors */
+setInterval(()=>{ if($('meteorToggle')?.checked && eventControls.active) { const times = cinematic ? 6 : 2; for(let i=0;i<times;i++) setTimeout(()=> spawnDomMeteor(), i*120 + Math.random()*240); } }, 7000);
+
+/* orbit toggle */
+let orbitEnabled = false;
+const orbitCheckbox = $('orbitToggle');
+orbitCheckbox.addEventListener('change', e=>{ orbitEnabled = !!e.target.checked; });
+
+/* camera pan */
+function updatePan(now){
+  if(!panEnabled || camModeSelect.value !== 'auto') { panOffset.x = 0; panOffset.y = 0; return; }
+  const t = ((now - panStart) / 10000) % 1;
+  const angle = t * Math.PI * 2;
+  panOffset.x = Math.cos(angle) * 18; panOffset.y = Math.sin(angle*0.6) * 10;
+}
+
+/* draw orbits */
+function drawOrbits(planets, show){
+  try{
+    oCtx.clearRect(0,0,orbitsCanvas.width, orbitsCanvas.height); if(!show || !planets || planets.length===0) return;
+    oCtx.globalCompositeOperation='lighter'; const domRect = planetsDom.getBoundingClientRect(); const cx = domRect.left + domRect.width/2; const cy = domRect.top + domRect.height/2;
+    for(const p of planets){ const rx = p.dist; const ry = p.dist * 0.48; oCtx.beginPath(); oCtx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI*2); oCtx.strokeStyle = 'rgba(255,255,255,0.06)'; oCtx.lineWidth = 1.0; oCtx.globalAlpha = 0.08; oCtx.stroke(); oCtx.globalAlpha = 1; }
+    oCtx.globalCompositeOperation='source-over';
+  }catch(e){ console.warn('drawOrbits error', e); }
+}
+
+/* meteors canvas */
+let meteorList=[];
+function spawnMeteor(){ meteorList.push({x:Math.random()*meteorsCanvas.width,y:-10,vx:(Math.random()*2-1)*2.2,vy:4+Math.random()*5,life:Math.random()*700+500,age:0,len:80+Math.random()*160}); }
+function renderMeteors(dt){ try{ mCtx.clearRect(0,0,meteorsCanvas.width,meteorsCanvas.height); mCtx.globalCompositeOperation='lighter'; for(let i=meteorList.length-1;i>=0;i--){ const m=meteorList[i]; m.x+=m.vx*dt*0.06; m.y+=m.vy*dt*0.06; m.age+=dt; const t=m.age/m.life; if(t>1){ meteorList.splice(i,1); continue; } const alpha=1-t; const grd=mCtx.createLinearGradient(m.x,m.y,m.x-m.vx*40,m.y-m.vy*40); grd.addColorStop(0,`rgba(255,255,255,${alpha})`); grd.addColorStop(1,'rgba(255,200,120,0)'); mCtx.strokeStyle=grd; mCtx.lineWidth=2.4; mCtx.beginPath(); mCtx.moveTo(m.x,m.y); mCtx.lineTo(m.x-m.vx*m.len*0.6,m.y-m.vy*m.len*0.6); mCtx.stroke(); } mCtx.globalCompositeOperation='source-over'; }catch(e){ console.warn('renderMeteors error', e); } }
+
+/* main loop */
+let last = performance.now();
+function loop(now){
+  const dt = Math.max(1, now - last); last = now;
+  updateFPS(now);
+  renderGalaxy(now); renderStars(now); renderNeb(now, dt);
+  updatePan(now);
+  if($('toggleBelt')?.checked) { renderAsteroids(now, dt); renderDeepObjects(now, dt); } else aCtx.clearRect(0,0,aCtx.canvas.width,aCtx.canvas.height);
+  if(Math.random() < 0.06 && meteorList.length < 10) spawnMeteor();
+  renderMeteors(dt);
+
+  try{
+    const domRect = planetsDom.getBoundingClientRect(); const cx = domRect.left + domRect.width/2, cy = domRect.top + domRect.height/2;
+    const speedMul = parseFloat($('speedCtrl')?.value || '1');
+    const timeScale = parseInt($('timeScale')?.value || '1000',10);
+    for(const p of active){
+      if(!p || !p.el || !p.surface || !p.label) continue;
+      if(orbitEnabled && p.orbitalPeriod){
+        const orbitalSpeed = (2*Math.PI) / (p.orbitalPeriod * (1000 / Math.max(1, timeScale)) );
+        p.angle += orbitalSpeed * dt * 0.06 * speedMul;
+      } else { p.angle = 0; }
+      const x = Math.cos(p.angle) * p.dist; const y = Math.sin(p.angle) * (p.dist * 0.48);
+      const left = cx + x - (p.el.clientWidth/2); const top  = cy + y - (p.el.clientHeight/2);
+      p.el.style.left = left + 'px'; p.el.style.top  = top + 'px';
+      const rotDeg = ((now*0.06) * p.spinSpeed * speedMul) % 360;
+      p.surface.style.transform = `rotate(${rotDeg}deg)`;
+      const lx = -x, ly = -y; const ang = Math.atan2(ly, lx);
+      const cxp = 50 + Math.cos(ang) * 28; const cyp = 50 + Math.sin(ang) * 18;
+      const distAU = p.dist / window.AU; const bright = Math.max(0.18, Math.min(1.0, 1.8 - distAU*0.06));
+      const lit = shade(p.color, 18 * bright); const dark = shade(p.color, -26 - (distAU*3));
+      p.surface.style.background = `radial-gradient(circle at ${cxp}% ${cyp}%, ${lit}, ${dark})`;
+      p.label.style.color = bright > 0.7 ? 'rgba(10,10,12,0.7)' : 'var(--muted)';
+    }
+
+    const earth = active.find(p=>p.id==='earth');
+    if(earth && earth.moon){
+      earth.moon.ang += 0.02 * (dt/16);
+      const mx = cx + Math.cos(earth.angle) * earth.dist;
+      const my = cy + Math.sin(earth.angle) * (earth.dist * 0.48);
+      const moonX = mx + Math.cos(earth.moon.ang) * earth.moon.dist;
+      const moonY = my + Math.sin(earth.moon.ang) * earth.moon.dist * 0.6;
+      earth.moon.el.style.left = (moonX - (parseFloat(earth.moon.el.style.width)||18)/2) + 'px';
+      earth.moon.el.style.top  = (moonY - (parseFloat(earth.moon.el.style.height)||18)/2) + 'px';
+    }
+    drawOrbits(active, $('toggleOrbits')?.checked);
+    if(Math.random() < 0.03) checkCollisions(now);
+  }catch(e){ console.warn('planet update error', e); }
+
+  applyStage();
+
+  // lens/flaring subtle animation when flare is visible
+  if(lensFlares.style.opacity && parseFloat(lensFlares.style.opacity) > 0){
+    $('lensOne').style.transform = `translateX(${ -80 + Math.cos(now*0.0006)*12 }px) scale(1.02)`;
+    $('lensTwo').style.transform = `translateX(${ 120 + Math.sin(now*0.0009)*18 }px) scale(0.98)`;
+    $('lensThree').style.transform = `translateX(${ 60 + Math.cos(now*0.0007)*10 }px) scale(0.9)`;
+  }
+
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+
+/* asteroids render */
+function renderAsteroids(now, dt){
+  try{
+    aCtx.clearRect(0,0,aCtx.canvas.width,aCtx.canvas.height);
+    const domRect = planetsDom.getBoundingClientRect(); const cx = domRect.left + domRect.width/2, cy = domRect.top + domRect.height/2;
+    for(const a of asteroids){
+      a.theta += a.angSpeed * (dt*0.06);
+      const rx = Math.cos(a.theta) * (a.a * window.AU);
+      const ry = Math.sin(a.theta) * (a.a * window.AU * 0.48) + (a.layer==='far'? -40:0);
+      const x = cx + rx; const y = cy + ry;
+      aCtx.beginPath(); aCtx.fillStyle = a.color; aCtx.arc(x,y,Math.max(1, a.size*0.9),0,Math.PI*2); aCtx.fill();
+    }
+  }catch(e){ console.warn('renderAsteroids error', e); }
+}
+
+/* deep objects placeholder */
+function renderDeepObjects(now, dt){}
+
+/* collision sampling */
+function checkCollisions(now){
+  if($('collisionMode')?.value !== 'passive') return;
+  const domRect = planetsDom.getBoundingClientRect(); const cx = domRect.left + domRect.width/2, cy = domRect.top + domRect.height/2;
+  const sampleCount = Math.min(asteroids.length, 36);
+  for(let i=0;i<sampleCount;i++){
+    const a = asteroids[Math.floor(Math.random()*asteroids.length)];
+    const b = asteroids[Math.floor(Math.random()*asteroids.length)];
+    if(!a||!b||a===b) continue;
+    const ax = cx + Math.cos(a.theta) * (a.a*window.AU) * (a.layer==='far'?0.45:(a.layer==='mid'?0.75:1));
+    const ay = cy + Math.sin(a.theta) * (a.a*window.AU*0.48) + (a.layer==='far'? -40:0);
+    const bx = cx + Math.cos(b.theta) * (b.a*window.AU) * (b.layer==='far'?0.45:(b.layer==='mid'?0.75:1));
+    const by = cy + Math.sin(b.theta) * (b.a*window.AU*0.48) + (b.layer==='far'? -40:0);
+    const dx = ax-bx, dy = ay-by; const d2 = dx*dx+dy*dy;
+    if(d2 < 900 + (a.size+b.size)*40 && Math.random() < 0.08){
+      const mx = (ax+bx)/2, my = (ay+by)/2;
+      triggerCollisionEffect(mx,my,{intensity:0.6 + Math.random()*0.8});
+      spawnDebrisParticles(mx,my,6+Math.floor(Math.random()*12));
+    }
+  }
+}
+
+/* UFO spawn (random direction & angle) */
+function spawnUFO(){
+  const u = document.createElement('div'); u.className='ufo';
+  const disc = document.createElement('div'); disc.className='disc'; const glow = document.createElement('div'); glow.className='glow'; const beam = document.createElement('div'); beam.className='beam';
+  u.appendChild(disc); u.appendChild(glow); u.appendChild(beam);
+  document.body.appendChild(u);
+  // random start edge and end edge
+  const edges = ['left','right','top','bottom','diag1','diag2'];
+  const dir = choose(edges);
+  const insets = 80;
+  let sx, sy, ex, ey;
+  if(dir==='left'){ sx = -160; sy = Math.random()*innerHeight; ex = innerWidth + 160; ey = Math.random()*innerHeight; }
+  else if(dir==='right'){ sx = innerWidth + 160; sy = Math.random()*innerHeight; ex = -160; ey = Math.random()*innerHeight; }
+  else if(dir==='top'){ sx = Math.random()*innerWidth; sy = -160; ex = Math.random()*innerWidth; ey = innerHeight + 160; }
+  else if(dir==='bottom'){ sx = Math.random()*innerWidth; sy = innerHeight + 160; ex = Math.random()*innerWidth; ey = -160; }
+  else if(dir==='diag1'){ sx = -160; sy = Math.random()*innerHeight*0.6; ex = innerWidth + 160; ey = Math.random()*innerHeight*0.4; }
+  else { sx = innerWidth + 160; sy = Math.random()*innerHeight*0.6; ex = -160; ey = Math.random()*innerHeight*0.4; }
+  const dur = 2400 + Math.random()*800; // 2.4 - 3.2s
+  u.style.left = sx + 'px'; u.style.top = sy + 'px'; u.style.opacity = 0.98;
+  const start = performance.now();
+  function step(now){
+    const t = (now - start)/dur;
+    if(t>1){ try{ u.remove(); }catch(_){} return; }
+    const ease = (u)=> 1 - Math.pow(1-u,3);
+    const et = ease(Math.max(0,Math.min(1,t)));
+    const cx = sx + (ex-sx)*et, cy = sy + (ey-sy)*et;
+    u.style.left = cx + 'px'; u.style.top = cy + 'px';
+    u.style.transform = `rotate(${Math.sin(et*Math.PI*2)*15}deg)`;
+    // glow/beam intensity
+    glow.style.opacity = 0.6 + Math.sin(et*Math.PI)*0.4;
+    beam.style.opacity = 0.5 + Math.abs(Math.cos(et*Math.PI))*0.5;
+    requestAnimationFrame(step);
+  }
+  requestAnimationFrame(step);
+}
+$('spawnUFO').addEventListener('click', ()=> spawnUFO());
+
+/* warp light - subtle sweep */
+function runWarpOnce(){
+  if(!warpEl) return;
+  warpEl.style.opacity = 1; warpEl.style.left = '-40%';
+  const dur = 4000 + Math.random()*3200;
+  warpEl.animate([{left:'-40%', opacity:0},{left:'60%', opacity:0.18},{left:'120%', opacity:0}],{duration:dur,easing:'cubic-bezier(.2,.9,.2,1)'});
+  setTimeout(()=> warpEl.style.opacity = 0, dur);
+}
+
+/* schedule events include warp run */
+function startAllEventTimersWithWarp(){
+  startAllEventTimers();
+  scheduleEvent('warp',15000,30000,runWarpOnce);
+}
+/* override earlier start when toggle checked */
+$('toggleCosmicEvents').addEventListener('change', (e)=>{ if(e.target.checked){ startAllEventTimersWithWarp(); } else stopAllEventTimers(); });
+
+/* snapshot */
+$('snapshot').addEventListener('click', ()=>{
+  try{
+    const el = document.documentElement;
+    const w = innerWidth, h = innerHeight;
+    const canvas = document.createElement('canvas'); canvas.width = w; canvas.height = h;
+    const ctx = canvas.getContext('2d');
+    // simple capture: draw background canvas layers
+    ctx.drawImage(galaxy,0,0); ctx.drawImage(stars,0,0); ctx.drawImage(nebula,0,0);
+    const data = canvas.toDataURL('image/png');
+    const a = document.createElement('a'); a.href = data; a.download = 'astromonyz_snapshot.png'; document.body.appendChild(a); a.click(); a.remove();
+  }catch(e){ alert('Snapshot failed: ' + e.message); }
+});
+
+/* simple keyboard shortcuts */
+window.addEventListener('keydown',(e)=>{ if(e.key==='c') $('cinematicToggle').click(); if(e.key==='u') $('spawnUFO').click(); });
+
+/* initial timers */
+if($('toggleCosmicEvents')?.checked){ eventControls.active=true; startAllEventTimersWithWarp(); }
+
+/* small helper: random asteroid explosions more often */
+setInterval(()=>{
+  if(!eventControls.active || !$('toggleCosmicEvents')?.checked) return;
+  if(Math.random() < 0.18){
+    // pick random asteroid-like position in belt area
+    const rect = planetsDom.getBoundingClientRect();
+    const cx = rect.left + rect.width/2; const cy = rect.top + rect.height/2;
+    const inner = 2.2 * window.AU, outer = 3.6 * window.AU;
+    const r = inner + Math.random()*(outer-inner);
+    const theta = Math.random()*Math.PI*2;
+    const x = cx + Math.cos(theta)*r*(0.9+Math.random()*0.2);
+    const y = cy + Math.sin(theta)*r*0.48;
+    triggerCollisionEffect(x,y,{intensity:0.5+Math.random()*0.9});
+    spawnDebrisParticles(x,y,6 + Math.floor(Math.random()*14));
+  }
+}, 12000 + Math.random()*8000);
+
+</script>
+</body>
+</html>
